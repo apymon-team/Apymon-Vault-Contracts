@@ -48,7 +48,9 @@ contract Vault is
     address public VAULT_KEY_CONTRACT;
     uint256 public VAULT_KEY_TOKEN_ID;
 
-    uint256 public unlockTime;
+    uint256 public timeLockedUntil;
+    bool public locked = false;
+    string private message;
 
     // @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -220,14 +222,17 @@ contract Vault is
      *
      **/
 
-    function timelock(uint256 _unlockTime, string calldata _unlockNote)
+    function lock(string calldata _unlockNote)
         external
         onlyKeyOwner
         unlocked
     {
-        unlockTime = _unlockTime;
-        emit LockVault(unlockTime, _unlockNote);
+        message = _unlockNote;
+        timeLockedUntil = block.timestamp;
+        emit VaultLocked(unlockTime);
     }
+
+
 
     /**
      *
@@ -258,6 +263,10 @@ contract Vault is
 
     function keyOwner() public view returns (address owner) {
         return IERC721(VAULT_KEY_CONTRACT).ownerOf(VAULT_KEY_TOKEN_ID);
+    }
+
+    function unlockable() public view returns (bool unlockable) {
+        return block.timestamp > timeLockedUntil
     }
 
     /**
@@ -300,7 +309,8 @@ contract Vault is
      **/
 
     modifier unlocked() {
-        require(block.timestamp > unlockTime, "Vault is currently timelocked.");
+        require(unlockable(), "Vault is currently timelocked.");
+        require(locked == false, "Vault is currently Locked.");
         _;
     }
 }

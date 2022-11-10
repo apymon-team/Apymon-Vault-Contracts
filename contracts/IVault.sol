@@ -36,10 +36,15 @@ interface IVault {
         address recipient
     );
 
-    event LockVault(uint256 unlockTime, string unlockNote);
+    event VaultLocked(uint256 timeLockUntil);
+    event VaultUnlocked(string message);
 
     function initialize(address vaultKeyContract, uint256 vaultKeyTokenId)
         external;
+    
+    function lock(string message) external;
+    function timelock(string message, uint256 timeLockUntil);
+    function unlock() returns string;
 
     function withdrawETH(address to, uint256 amount) external;
 
@@ -72,6 +77,8 @@ interface IVault {
         external;
 
     function keyOwner() external view returns (address);
+    function locked() external view returns (bool);
+    function unlockable() external view returns (bool);
 
     enum TokenType {
         ETH,
