@@ -13,7 +13,7 @@ import "./IVaultFactory.sol";
 
 /**
  * @title VaultFactory
- * @author Jake
+ * @author Apymon
  *
  * The VaultFactory is responsible for creating and keeping track of Vault instances.
  * It is immutably tied to a ERC721 contract and allows a single Vault to be created

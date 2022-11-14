@@ -21,7 +21,7 @@ import "./IPunks.sol";
 
 /**
  * @title Vault
- * @author Jake
+ * @author Apymon
  *
  * The Vault is responsible for securely handling deposits and withdraws of ETH,
  * ERC20, ERC721, ERC1155, and CryptoPunk tokens. A timelock function exists to
@@ -48,7 +48,9 @@ contract Vault is
     address public VAULT_KEY_CONTRACT;
     uint256 public VAULT_KEY_TOKEN_ID;
 
+    bool public isLocked;
     uint256 public unlockTime;
+    string private unlockNote;
 
     // @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -64,10 +66,11 @@ contract Vault is
      *
      **/
 
-    function initialize(
-        address vaultKeyContract,
-        uint256 vaultKeyTokenId
-    ) external override initializer {
+    function initialize(address vaultKeyContract, uint256 vaultKeyTokenId)
+        external
+        override
+        initializer
+    {
         VAULT_FACTORY_CONTRACT = msg.sender;
         VAULT_KEY_CONTRACT = vaultKeyContract;
         VAULT_KEY_TOKEN_ID = vaultKeyTokenId;
@@ -181,7 +184,8 @@ contract Vault is
      *
      * @notice Withdraws multiple tokens at once, can only be called by the key owner and when the vault is unlocked.
      *
-     * @param tokens                 An array of token withdraw information
+     * @param tokens                The array of token withdraw information.
+     * @param to                    The recipient of the tokens.
      *
      **/
 
@@ -213,20 +217,46 @@ contract Vault is
 
     /**
      *
-     * @notice Locks the vault until the provided time has passed, can only be called by the key owner and when the vault is unlocked.
+     * @notice Locks the vault until the provided time has passed and unlock is called, can only be called by the key owner and when the vault is unlocked.
      *
      * @param _unlockTime           The timestamp of when the vault should unlock, measured in seconds since the unix epoch.
-     * @param _unlockNote           The note that is emitted as a part of the LockVault event data.
+     * @param _unlockNote           The note that is returned when the vault is unlocked and is emitted in the UnlockVault event data.
      *
      **/
 
-    function timelock(uint256 _unlockTime, string calldata _unlockNote)
+    function lock(uint256 _unlockTime, string calldata _unlockNote)
         external
         onlyKeyOwner
         unlocked
     {
+        isLocked = true;
+
         unlockTime = _unlockTime;
-        emit LockVault(unlockTime, _unlockNote);
+        unlockNote = _unlockNote;
+
+        emit LockVault(unlockTime);
+    }
+
+    /**
+     *
+     * @notice Unlocks the vault, can only be called by the key owner, when the vault is locked, and when the unlock time has passed.
+     *
+     * @return _unlockNote                The note provided when the vault was last locked.
+     *
+     **/
+
+    function unlock()
+        external
+        onlyKeyOwner
+        returns (string memory _unlockNote)
+    {
+        require(isLocked, "Vault is currently unlocked.");
+        require(block.timestamp > unlockTime, "Vault is currently timelocked.");
+
+        isLocked = false;
+
+        emit UnlockVault(unlockNote);
+        return unlockNote;
     }
 
     /**
@@ -301,6 +331,7 @@ contract Vault is
 
     modifier unlocked() {
         require(block.timestamp > unlockTime, "Vault is currently timelocked.");
+        require(!isLocked, "Vault is currently locked.");
         _;
     }
 }
