@@ -570,31 +570,39 @@ describe("Vault", function () {
 
     })
 
-    it("Timelocking vault emits an event", async function () {
+    it("Locking vault emits an event", async function () {
       const unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
       const unlockNote = "This is a very important message from the past."
-      await expect(vaultProxy.connect(userA).timelock(unlockTime, unlockNote)).to.emit(vaultProxy, 'LockVault').withArgs(unlockTime, unlockNote);
+      await expect(vaultProxy.connect(userA).lock(unlockTime, unlockNote)).to.emit(vaultProxy, 'LockVault').withArgs(unlockTime);
+    });
+
+    it("Unlocking vault emits an event", async function () {
+      const unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
+      const unlockNote = "This is a very important message from the past."
+      await vaultProxy.connect(userA).lock(unlockTime, unlockNote);
+      await time.increaseTo(unlockTime);
+      await expect(vaultProxy.connect(userA).unlock()).to.emit(vaultProxy, 'UnlockVault').withArgs(unlockNote);
     });
 
     it("Unlock time starts at zero", async function () {
       expect(await vaultProxy.unlockTime()).to.equal(0);
     });
 
-    it("Owner can timelock vault", async function () {
+    it("Owner can lock vault", async function () {
       const unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
       const unlockNote = "This is a very important message from the past."
-      await expect(vaultProxy.connect(userA).timelock(unlockTime, unlockNote)).not.to.be.reverted
+      await expect(vaultProxy.connect(userA).lock(unlockTime, unlockNote)).not.to.be.reverted
       expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
     });
 
-    it("Nonowner cannot timelock vault", async function () {
+    it("Nonowner cannot lock vault", async function () {
       const unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
       const unlockNote = "This is a very important message from the past."
-      await expect(vaultProxy.connect(userB).timelock(unlockTime, unlockNote)).to.be.reverted
+      await expect(vaultProxy.connect(userB).lock(unlockTime, unlockNote)).to.be.reverted
       expect(await vaultProxy.unlockTime()).to.equal(0);
     });
 
-    describe("Locked", function () {
+    describe("Locked (before unlock time has passed)", function () {
 
       let unlockTime;
       const unlockNote = "This is a very important message from the past."
@@ -618,15 +626,24 @@ describe("Vault", function () {
 
         //Timelock
         unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
-        await vaultProxy.connect(userA).timelock(unlockTime, unlockNote);
+        await vaultProxy.connect(userA).lock(unlockTime, unlockNote);
 
       })
 
-      it("Owner cannot change timelock", async function () {
+      it("Owner cannot unlock vault", async function () {
 
         expect(await vaultProxy.unlockTime()).to.not.equal(0);
         expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
-        await expect(vaultProxy.connect(userA).timelock(unlockTime, unlockNote)).to.be.reverted
+        await expect(vaultProxy.connect(userA).unlock()).to.be.reverted
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Owner cannot lock vault", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+        await expect(vaultProxy.connect(userA).lock(unlockTime, unlockNote)).to.be.reverted
         expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
 
       });
@@ -724,6 +741,288 @@ describe("Vault", function () {
         expect(await erc1155Token.balanceOf(vaultProxy.address, 1)).to.equal(1)
         expect(await cryptoPunksToken.punkIndexToAddress(1)).to.equal(vaultProxy.address)
 
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Nonowner cannot unlock vault", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+        await expect(vaultProxy.connect(userB).unlock()).to.be.reverted
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Nonowner cannot lock vault", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+        await expect(vaultProxy.connect(userB).lock(unlockTime, unlockNote)).to.be.reverted
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Nonowner cannot withdraw ETH", async function () {
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+        await expect(vaultProxy.connect(userB).withdrawETH(userB.address, ethers.utils.parseEther('1', 'ether').toString())).to.be.reverted;
+
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Nonowner cannot withdraw ERC20", async function () {
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+        expect(await erc20Token.balanceOf(userB.address)).to.equal(1)
+        expect(await erc20Token.balanceOf(vaultProxy.address)).to.equal(1)
+
+        await expect(vaultProxy.connect(userB).withdrawERC20(erc20Token.address, userB.address, 1)).to.be.reverted
+
+        expect(await erc20Token.balanceOf(userB.address)).to.equal(1)
+        expect(await erc20Token.balanceOf(vaultProxy.address)).to.equal(1)
+
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+      });
+
+      it("Nonowner cannot withdraw ERC721", async function () {
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+        expect(await erc721Token.ownerOf(1)).to.equal(vaultProxy.address)
+        await expect(vaultProxy.connect(userB).withdrawERC721(erc721Token.address, 1, userB.address)).to.be.reverted
+        expect(await erc721Token.ownerOf(1)).to.equal(vaultProxy.address)
+
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Nonowner cannot withdraw ERC1155", async function () {
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+        expect(await erc1155Token.balanceOf(userB.address, 1)).to.equal(0)
+        expect(await erc1155Token.balanceOf(vaultProxy.address, 1)).to.equal(1)
+
+        await expect(vaultProxy.connect(userB).withdrawERC1155(erc1155Token.address, 1, userB.address, 1)).to.be.reverted
+
+        expect(await erc1155Token.balanceOf(userB.address, 1)).to.equal(0)
+        expect(await erc1155Token.balanceOf(vaultProxy.address, 1)).to.equal(1)
+
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Nonowner cannot withdraw CryptoPunk", async function () {
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+        expect(await cryptoPunksToken.punkIndexToAddress(1)).to.equal(vaultProxy.address)
+        await expect(vaultProxy.connect(userB).withdrawCryptoPunk(cryptoPunksToken.address, 1, userB.address)).to.be.reverted
+        expect(await cryptoPunksToken.punkIndexToAddress(1)).to.equal(vaultProxy.address)
+
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Nonowner cannot withdraw multiple tokens", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+        expect(await erc20Token.balanceOf(userA.address)).to.equal(0)
+        expect(await erc20Token.balanceOf(userB.address)).to.equal(1)
+        expect(await erc20Token.balanceOf(vaultProxy.address)).to.equal(1)
+        expect(await erc721Token.ownerOf(1)).to.equal(vaultProxy.address)
+        expect(await erc1155Token.balanceOf(userA.address, 1)).to.equal(0)
+        expect(await erc1155Token.balanceOf(userB.address, 1)).to.equal(0)
+        expect(await erc1155Token.balanceOf(vaultProxy.address, 1)).to.equal(1)
+        expect(await cryptoPunksToken.punkIndexToAddress(1)).to.equal(vaultProxy.address)
+
+        let ethWithdraw = { tokenType: TokenType.ETH, token: "0x0000000000000000000000000000000000000000", tokenId: 0, amount: ethers.utils.parseEther('1', 'ether') }
+        let erc20Withdraw = { tokenType: TokenType.ERC20, token: erc20Token.address, tokenId: 0, amount: 1 }
+        let erc721Withdraw = { tokenType: TokenType.ERC721, token: erc721Token.address, tokenId: 1, amount: 0 }
+        let erc1155Withdraw = { tokenType: TokenType.ERC1155, token: erc1155Token.address, tokenId: 1, amount: 1 }
+        let cryptopunkWithdraw = { tokenType: TokenType.CryptoPunk, token: cryptoPunksToken.address, tokenId: 1, amount: 0 }
+
+        await expect(vaultProxy.connect(userB).withdrawMultiple([ethWithdraw, erc20Withdraw, erc721Withdraw, erc1155Withdraw, cryptopunkWithdraw], userA.address)).to.be.reverted
+
+        expect(await erc20Token.balanceOf(userA.address)).to.equal(0)
+        expect(await erc20Token.balanceOf(userB.address)).to.equal(1)
+        expect(await erc20Token.balanceOf(vaultProxy.address)).to.equal(1)
+        expect(await erc721Token.ownerOf(1)).to.equal(vaultProxy.address)
+        expect(await erc1155Token.balanceOf(userA.address, 1)).to.equal(0)
+        expect(await erc1155Token.balanceOf(userB.address, 1)).to.equal(0)
+        expect(await erc1155Token.balanceOf(vaultProxy.address, 1)).to.equal(1)
+        expect(await cryptoPunksToken.punkIndexToAddress(1)).to.equal(vaultProxy.address)
+
+      });
+
+    });
+
+    describe("Locked (after unlock time has passed)", function () {
+
+      let unlockTime;
+      const unlockNote = "This is a very important message from the past."
+
+      beforeEach("Deploy Factory & Tokens & Create a vault & Deposit", async () => {
+        ({ vaultTeam, tokenTeam, userA, userB, userC, erc721Key, erc20Token, erc721Token, erc1155Token, cryptoPunksToken, vaultFactory } = await loadFixture(deployContracts));
+
+        await vaultFactory.connect(userA).createVault(1);
+
+        let vaultAddress = await vaultFactory.vaultOf(1);
+
+        const VaultProxy = await ethers.getContractFactory("Vault");
+        vaultProxy = VaultProxy.attach(vaultAddress);
+
+        //Deposits
+        await userA.sendTransaction({ to: vaultProxy.address, value: ethers.utils.parseEther('1', 'ether') })
+        await erc20Token.connect(userA).transfer(vaultProxy.address, 1);
+        await erc721Token.connect(userA)["safeTransferFrom(address,address,uint256)"](userA.address, vaultProxy.address, 1);
+        await erc1155Token.connect(userA)["safeTransferFrom(address,address,uint256,uint256,bytes)"](userA.address, vaultProxy.address, 1, 1, [])
+        await cryptoPunksToken.connect(userA).transferPunk(vaultProxy.address, 1);
+
+        //Timelock
+        unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
+        await vaultProxy.connect(userA).lock(unlockTime, unlockNote);
+
+        //Time travel
+        await time.increaseTo(unlockTime);
+
+      })
+
+      it("Owner can unlock vault", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+        await expect(vaultProxy.connect(userA).unlock()).not.to.be.reverted
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Owner cannot lock vault", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+        await expect(vaultProxy.connect(userA).lock(unlockTime, unlockNote)).to.be.reverted
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Owner cannot withdraw ETH", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+        await expect(vaultProxy.connect(userA).withdrawETH(userA.address, ethers.utils.parseEther('1', 'ether').toString())).to.be.reverted;
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Owner cannot withdraw ERC20", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+        expect(await erc20Token.balanceOf(userA.address)).to.equal(0)
+        expect(await erc20Token.balanceOf(vaultProxy.address)).to.equal(1)
+
+        await expect(vaultProxy.connect(userA).withdrawERC20(erc20Token.address, userA.address, 1)).to.be.reverted
+
+        expect(await erc20Token.balanceOf(userA.address)).to.equal(0)
+        expect(await erc20Token.balanceOf(vaultProxy.address)).to.equal(1)
+
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+      });
+
+      it("Owner cannot withdraw ERC721", async function () {
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+        expect(await erc721Token.ownerOf(1)).to.equal(vaultProxy.address)
+        await expect(vaultProxy.connect(userA).withdrawERC721(erc721Token.address, 1, userA.address)).to.be.reverted
+        expect(await erc721Token.ownerOf(1)).to.equal(vaultProxy.address)
+
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Owner cannot withdraw ERC1155", async function () {
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+        expect(await erc1155Token.balanceOf(userA.address, 1)).to.equal(0)
+        expect(await erc1155Token.balanceOf(vaultProxy.address, 1)).to.equal(1)
+
+        await expect(vaultProxy.connect(userA).withdrawERC1155(erc1155Token.address, 1, userA.address, 1)).to.be.reverted
+
+        expect(await erc1155Token.balanceOf(userA.address, 1)).to.equal(0)
+        expect(await erc1155Token.balanceOf(vaultProxy.address, 1)).to.equal(1)
+
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Owner cannot withdraw CryptoPunk", async function () {
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+        expect(await cryptoPunksToken.punkIndexToAddress(1)).to.equal(vaultProxy.address)
+        await expect(vaultProxy.connect(userA).withdrawCryptoPunk(cryptoPunksToken.address, 1, userA.address)).to.be.reverted
+        expect(await cryptoPunksToken.punkIndexToAddress(1)).to.equal(vaultProxy.address)
+
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Owner cannot withdraw multiple tokens", async function () {
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+        expect(await erc20Token.balanceOf(userA.address)).to.equal(0)
+        expect(await erc20Token.balanceOf(vaultProxy.address)).to.equal(1)
+        expect(await erc721Token.ownerOf(1)).to.equal(vaultProxy.address)
+        expect(await erc1155Token.balanceOf(userA.address, 1)).to.equal(0)
+        expect(await erc1155Token.balanceOf(userB.address, 1)).to.equal(0)
+        expect(await erc1155Token.balanceOf(vaultProxy.address, 1)).to.equal(1)
+        expect(await cryptoPunksToken.punkIndexToAddress(1)).to.equal(vaultProxy.address)
+
+        let ethWithdraw = { tokenType: TokenType.ETH, token: "0x0000000000000000000000000000000000000000", tokenId: 0, amount: ethers.utils.parseEther('1', 'ether') }
+        let erc20Withdraw = { tokenType: TokenType.ERC20, token: erc20Token.address, tokenId: 0, amount: 1 }
+        let erc721Withdraw = { tokenType: TokenType.ERC721, token: erc721Token.address, tokenId: 1, amount: 0 }
+        let erc1155Withdraw = { tokenType: TokenType.ERC1155, token: erc1155Token.address, tokenId: 1, amount: 1 }
+        let cryptopunkWithdraw = { tokenType: TokenType.CryptoPunk, token: cryptoPunksToken.address, tokenId: 1, amount: 0 }
+
+        await expect(vaultProxy.connect(userA).withdrawMultiple([ethWithdraw, erc20Withdraw, erc721Withdraw, erc1155Withdraw, cryptopunkWithdraw], userA.address)).to.be.reverted
+
+        expect(await erc20Token.balanceOf(userA.address)).to.equal(0)
+        expect(await erc20Token.balanceOf(vaultProxy.address)).to.equal(1)
+        expect(await erc721Token.ownerOf(1)).to.equal(vaultProxy.address)
+        expect(await erc1155Token.balanceOf(userA.address, 1)).to.equal(0)
+        expect(await erc1155Token.balanceOf(userB.address, 1)).to.equal(0)
+        expect(await erc1155Token.balanceOf(vaultProxy.address, 1)).to.equal(1)
+        expect(await cryptoPunksToken.punkIndexToAddress(1)).to.equal(vaultProxy.address)
+
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Nonowner cannot unlock vault", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+        await expect(vaultProxy.connect(userB).unlock()).to.be.reverted;
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Nonowner cannot lock vault", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+        await expect(vaultProxy.connect(userB).lock(unlockTime, unlockNote)).to.be.reverted
         expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
 
       });
@@ -852,12 +1151,33 @@ describe("Vault", function () {
 
         //Timelock
         unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
-        await vaultProxy.connect(userA).timelock(unlockTime, unlockNote);
+        await vaultProxy.connect(userA).lock(unlockTime, unlockNote);
 
         //Time travel
         await time.increaseTo(unlockTime);
 
+        //Unlock
+        await vaultProxy.connect(userA).unlock();
+
       })
+
+      it("Owner cannot unlock vault", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+        await expect(vaultProxy.connect(userA).unlock()).to.be.reverted
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Owner can lock vault", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+        await expect(vaultProxy.connect(userA).lock(unlockTime, unlockNote)).not.to.be.reverted
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
 
       it("Owner can withdraw ETH", async function () {
         expect(await vaultProxy.unlockTime()).to.not.equal(0);
@@ -965,6 +1285,25 @@ describe("Vault", function () {
         expect(await erc1155Token.balanceOf(vaultProxy.address, 1)).to.equal(0)
         expect(await cryptoPunksToken.punkIndexToAddress(1)).to.equal(userA.address)
 
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+
+      it("Nonowner cannot unlock vault", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+        await expect(vaultProxy.connect(userB).unlock()).to.be.reverted
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+
+      });
+
+      it("Nonowner cannot lock vault", async function () {
+
+        expect(await vaultProxy.unlockTime()).to.not.equal(0);
+        expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
+        await expect(vaultProxy.connect(userB).lock(unlockTime, unlockNote)).to.be.reverted
         expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
 
       });
@@ -1191,11 +1530,11 @@ describe("Vault", function () {
 
     });
 
-    it("New owner can timelock vault", async function () {
+    it("New owner can lock vault", async function () {
       const unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
       const unlockNote = "This is a very important message from the past."
-      await expect(vaultProxy.connect(userC).timelock(unlockTime, unlockNote)).not.to.be.reverted
-      expect(await vaultProxy.unlockTime()).to.equal(unlockTime, unlockNote);
+      await expect(vaultProxy.connect(userC).lock(unlockTime, unlockNote)).not.to.be.reverted
+      expect(await vaultProxy.unlockTime()).to.equal(unlockTime);
     });
 
     // Prevoius Owner
@@ -1274,10 +1613,10 @@ describe("Vault", function () {
     });
 
 
-    it("Previous owner cannot timelock vault", async function () {
+    it("Previous owner cannot lock vault", async function () {
       const unlockTime = (await time.latest()) + ONE_YEAR_IN_SECS;
       const unlockNote = "This is a very important message from the past."
-      await expect(vaultProxy.connect(userA).timelock(unlockTime, unlockNote)).to.be.reverted
+      await expect(vaultProxy.connect(userA).lock(unlockTime, unlockNote)).to.be.reverted
       expect(await vaultProxy.unlockTime()).to.equal(0);
     });
 

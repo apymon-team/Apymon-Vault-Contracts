@@ -36,7 +36,8 @@ interface IVault {
         address recipient
     );
 
-    event LockVault(uint256 unlockTime, string unlockNote);
+    event LockVault(uint256 unlockTime);
+    event UnlockVault(string unlockNote);
 
     function initialize(address vaultKeyContract, uint256 vaultKeyTokenId)
         external;
