@@ -34,10 +34,11 @@ contract VaultFactory is IVaultFactory, UUPSUpgradeable, OwnableUpgradeable {
 
     /**
      *
-     * @notice Initializes the Vault instance and ties it to a particular ERC721 token, referred to as the key. Cannot be called on the implementation contract and can only be called once per proxy instance.
+     * @notice Initializes the Vault instance and ties it to a particular ERC721 token, referred to as the key.
+     * @dev Cannot be called on the implementation contract and can only be called once per proxy instance.
      *
-     * @param vaultImplementationContract      The address of the vault implementation contract that will be used to create vault instances.
-     * @param vaultKeyContract       The vault key contract that will act
+     * @param vaultImplementationContract		The address of the vault implementation contract that will be used to create vault instances.
+     * @param vaultKeyContract					The vault key contract that will act
      *
      **/
 
@@ -54,7 +55,7 @@ contract VaultFactory is IVaultFactory, UUPSUpgradeable, OwnableUpgradeable {
      *
      * @notice Creates a vault instance that is owned by a given token id from the vault key contract, can only be called by the token id owner and once per token id.
      *
-     * @param vaultKeyTokenId       The id of the token that will act as the key to the vault.
+     * @param vaultKeyTokenId       			The id of the token that will act as the key to the vault.
      *
      **/
 
@@ -84,8 +85,8 @@ contract VaultFactory is IVaultFactory, UUPSUpgradeable, OwnableUpgradeable {
      *
      * @notice Returns the address of the vault associated with a given key token id
      *
-     * @param vaultKeyTokenId       The token id of the key.
-     * @return vault                The address of the vault.
+     * @param vaultKeyTokenId       			The token id of the key.
+     * @return vault                			The address of the vault.
      *
      **/
 
@@ -104,10 +105,7 @@ contract VaultFactory is IVaultFactory, UUPSUpgradeable, OwnableUpgradeable {
         returns (address vault)
     {
         vault = Clones.clone(VAULT_IMPLEMENTATION_CONTRACT);
-        IVault(vault).initialize(
-            VAULT_KEY_CONTRACT,
-            vaultKeyTokenId
-        );
+        IVault(vault).initialize(VAULT_KEY_CONTRACT, vaultKeyTokenId);
 
         return address(vault);
     }

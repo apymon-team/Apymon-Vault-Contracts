@@ -10,8 +10,6 @@ import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-
 import "@openzeppelin/contracts-upgradeable/utils/AddressUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -37,7 +35,6 @@ contract Vault is
     IVault,
     ERC1155Holder,
     ERC721Holder,
-    ReentrancyGuard,
     Initializable
 {
     using AddressUpgradeable for address;
@@ -59,10 +56,11 @@ contract Vault is
 
     /**
      *
-     * @notice Initializes the Vault instance and ties it to a particular ERC721 token, referred to as the key. Cannot be called on the implementation contract and can only be called once per proxy instance.
+     * @notice Initializes the Vault instance and ties it to a particular ERC721 token, referred to as the key.
+     * @dev Cannot be called on the implementation contract and can only be called once per proxy instance.
      *
-     * @param vaultKeyContract          The contract address of the ERC721 key token.
-     * @param vaultKeyTokenId           The id of the token that will act as the key of the Vault.
+     * @param vaultKeyContract		The contract address of the ERC721 key token.
+     * @param vaultKeyTokenId		The id of the token that will act as the key of the Vault.
      *
      **/
 
@@ -89,8 +87,7 @@ contract Vault is
         public
         override
         onlyKeyOwner
-        unlocked
-        nonReentrant
+        onlyWhenUnlocked
     {
         payable(to).sendValue(amount);
         emit WithdrawETH(msg.sender, to, amount);
@@ -110,7 +107,7 @@ contract Vault is
         address token,
         address to,
         uint256 amount
-    ) public override onlyKeyOwner unlocked {
+    ) public override onlyKeyOwner onlyWhenUnlocked {
         IERC20(token).safeTransfer(to, amount);
         emit WithdrawERC20(msg.sender, token, to, amount);
     }
@@ -129,7 +126,7 @@ contract Vault is
         address token,
         uint256 tokenId,
         address to
-    ) public override onlyKeyOwner unlocked {
+    ) public override onlyKeyOwner onlyWhenUnlocked {
         IERC721(token).safeTransferFrom(address(this), to, tokenId);
         emit WithdrawERC721(msg.sender, token, tokenId, to);
     }
@@ -150,7 +147,7 @@ contract Vault is
         uint256 tokenId,
         address to,
         uint256 amount
-    ) public override onlyKeyOwner unlocked {
+    ) public override onlyKeyOwner onlyWhenUnlocked {
         IERC1155(token).safeTransferFrom(
             address(this),
             to,
@@ -175,7 +172,7 @@ contract Vault is
         address punks,
         uint256 punkIndex,
         address to
-    ) public override onlyKeyOwner unlocked {
+    ) public override onlyKeyOwner onlyWhenUnlocked {
         IPunks(punks).transferPunk(to, punkIndex);
         emit WithdrawCryptoPunk(msg.sender, punks, punkIndex, to);
     }
@@ -193,24 +190,40 @@ contract Vault is
         external
         override
         onlyKeyOwner
-        unlocked
+        onlyWhenUnlocked
     {
-        for (uint256 i = 0; i < tokens.length; i++) {
-            if (tokens[i].tokenType == TokenType.ETH) {
-                withdrawETH(to, tokens[i].amount);
-            } else if (tokens[i].tokenType == TokenType.ERC20) {
-                withdrawERC20(tokens[i].token, to, tokens[i].amount);
-            } else if (tokens[i].tokenType == TokenType.ERC721) {
-                withdrawERC721(tokens[i].token, tokens[i].tokenId, to);
-            } else if (tokens[i].tokenType == TokenType.ERC1155) {
-                withdrawERC1155(
-                    tokens[i].token,
-                    tokens[i].tokenId,
+        uint256 length = tokens.length;
+        for (uint256 i = 0; i < length; ) {
+            TokenType tokenType = tokens[i].tokenType;
+            address token = tokens[i].token;
+            uint256 tokenId = tokens[i].tokenId;
+            uint256 amount = tokens[i].amount;
+
+            if (tokenType == TokenType.ETH) {
+                payable(to).sendValue(amount);
+                emit WithdrawETH(msg.sender, to, amount);
+            } else if (tokenType == TokenType.ERC20) {
+                IERC20(token).safeTransfer(to, amount);
+                emit WithdrawERC20(msg.sender, token, to, amount);
+            } else if (tokenType == TokenType.ERC721) {
+                IERC721(token).safeTransferFrom(address(this), to, tokenId);
+                emit WithdrawERC721(msg.sender, token, tokenId, to);
+            } else if (tokenType == TokenType.ERC1155) {
+                IERC1155(token).safeTransferFrom(
+                    address(this),
                     to,
-                    tokens[i].amount
+                    tokenId,
+                    amount,
+                    ""
                 );
-            } else if (tokens[i].tokenType == TokenType.CryptoPunk) {
-                withdrawCryptoPunk(tokens[i].token, tokens[i].tokenId, to);
+                emit WithdrawERC1155(msg.sender, token, tokenId, to, amount);
+            } else if (tokenType == TokenType.CryptoPunk) {
+                IPunks(token).transferPunk(to, tokenId);
+                emit WithdrawCryptoPunk(msg.sender, token, tokenId, to);
+            }
+
+            unchecked {
+                i++;
             }
         }
     }
@@ -227,7 +240,7 @@ contract Vault is
     function lock(uint256 _unlockTime, string calldata _unlockNote)
         external
         onlyKeyOwner
-        unlocked
+        onlyWhenUnlocked
     {
         isLocked = true;
 
@@ -241,7 +254,7 @@ contract Vault is
      *
      * @notice Unlocks the vault, can only be called by the key owner, when the vault is locked, and when the unlock time has passed.
      *
-     * @return _unlockNote                The note provided when the vault was last locked.
+     * @return _unlockNote			The note provided when the vault was last locked.
      *
      **/
 
@@ -292,7 +305,7 @@ contract Vault is
 
     /**
      *
-     *  @dev Attempt to stop the transfer of the ERC721 key token to the vault.
+     * @dev Attempt to stop the transfer of the ERC721 key token to the vault.
      *
      **/
 
@@ -314,7 +327,7 @@ contract Vault is
 
     /**
      *
-     *  @dev Used to prevent calling any withdraw or timelock functions unless the caller owns the vault key.
+     * @dev Used to prevent calling any withdraw or timelock functions unless the caller owns the vault key.
      *
      **/
 
@@ -325,11 +338,11 @@ contract Vault is
 
     /**
      *
-     *  @dev Used to prevent calling any withdraws or timelock functions when the vault is locked.
+     * @dev Used to prevent calling any withdraws or timelock functions when the vault is locked.
      *
      **/
 
-    modifier unlocked() {
+    modifier onlyWhenUnlocked() {
         require(block.timestamp > unlockTime, "Vault is currently timelocked.");
         require(!isLocked, "Vault is currently locked.");
         _;
