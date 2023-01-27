@@ -31,12 +31,7 @@ import "./IPunks.sol";
  *
  **/
 
-contract Vault is
-    IVault,
-    ERC1155Holder,
-    ERC721Holder,
-    Initializable
-{
+contract Vault is IVault, ERC1155Holder, ERC721Holder, Initializable {
     using AddressUpgradeable for address;
     using AddressUpgradeable for address payable;
     using SafeERC20 for IERC20;
@@ -53,6 +48,8 @@ contract Vault is
     constructor() {
         _disableInitializers();
     }
+
+    receive() external payable {}
 
     /**
      *
@@ -84,7 +81,7 @@ contract Vault is
      **/
 
     function withdrawETH(address to, uint256 amount)
-        public
+        external
         override
         onlyKeyOwner
         onlyWhenUnlocked
@@ -107,7 +104,7 @@ contract Vault is
         address token,
         address to,
         uint256 amount
-    ) public override onlyKeyOwner onlyWhenUnlocked {
+    ) external override onlyKeyOwner onlyWhenUnlocked {
         IERC20(token).safeTransfer(to, amount);
         emit WithdrawERC20(msg.sender, token, to, amount);
     }
@@ -126,7 +123,7 @@ contract Vault is
         address token,
         uint256 tokenId,
         address to
-    ) public override onlyKeyOwner onlyWhenUnlocked {
+    ) external override onlyKeyOwner onlyWhenUnlocked {
         IERC721(token).safeTransferFrom(address(this), to, tokenId);
         emit WithdrawERC721(msg.sender, token, tokenId, to);
     }
@@ -147,7 +144,7 @@ contract Vault is
         uint256 tokenId,
         address to,
         uint256 amount
-    ) public override onlyKeyOwner onlyWhenUnlocked {
+    ) external override onlyKeyOwner onlyWhenUnlocked {
         IERC1155(token).safeTransferFrom(
             address(this),
             to,
@@ -172,7 +169,7 @@ contract Vault is
         address punks,
         uint256 punkIndex,
         address to
-    ) public override onlyKeyOwner onlyWhenUnlocked {
+    ) external override onlyKeyOwner onlyWhenUnlocked {
         IPunks(punks).transferPunk(to, punkIndex);
         emit WithdrawCryptoPunk(msg.sender, punks, punkIndex, to);
     }
@@ -322,8 +319,6 @@ contract Vault is
         );
         return this.onERC721Received.selector;
     }
-
-    receive() external payable {}
 
     /**
      *
